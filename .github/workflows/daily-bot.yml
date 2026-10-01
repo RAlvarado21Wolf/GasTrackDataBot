@@ -1,0 +1,56 @@
+name: GasTrack Daily Data Update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+      timezone: "America/Guatemala"
+
+  workflow_dispatch:
+
+jobs:
+
+  update-data:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run GasTrackDataBot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -m bot.main
+
+      - name: Check generated files
+        run: |
+          git status
+
+      - name: Commit updated data
+        run: |
+          git config user.name "GasTrackDataBot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/current.json
+          git add history/
+
+          git diff --cached --quiet || git commit -m "Update fuel prices"
+
+      - name: Push updated data
+        run: |
+          git push
