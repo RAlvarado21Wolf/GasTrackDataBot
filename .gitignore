@@ -1,0 +1,11 @@
+.env
+
+__pycache__/
+*.pyc
+
+debug_*.txt
+
+venv/
+.venv/
+
+data/current.json
