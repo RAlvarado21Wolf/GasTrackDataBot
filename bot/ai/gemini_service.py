@@ -1,6 +1,5 @@
 # bot/ai/gemini_service.py
 
-from email.mime import text
 import json
 import random
 import time
@@ -29,7 +28,9 @@ class GeminiService:
 
         self.model = GEMINI_MODEL
 
-        self.client = genai.Client(api_key=GEMINI_API_KEY)
+        self.client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
 
         print(f"[Gemini] Modelo: {self.model}")
 
@@ -45,21 +46,32 @@ class GeminiService:
 
             try:
 
-                print(f"[Gemini] Intento " f"{attempt}/{MAX_RETRIES}")
+                print(
+                    f"[Gemini] Intento "
+                    f"{attempt}/{MAX_RETRIES}"
+                )
 
                 response = self.client.models.generate_content(
                     model=self.model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
+
                         # ------------------------------------
                         # Temperatura baja:
                         # queremos datos, no creatividad.
                         # ------------------------------------
+
                         temperature=0,
+
                         # ------------------------------------
                         # Google Search Grounding
                         # ------------------------------------
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
+
+                        tools=[
+                            types.Tool(
+                                google_search=types.GoogleSearch()
+                            )
+                        ],
                     ),
                 )
 
@@ -69,23 +81,31 @@ class GeminiService:
 
                 if response is None:
 
-                    raise RuntimeError("Gemini devolvió una respuesta vacía.")
+                    raise RuntimeError(
+                        "Gemini devolvió una respuesta vacía."
+                    )
 
-                text = response.text
+                response_text = response.text
 
-                if not text:
+                if not response_text:
 
-                    raise RuntimeError("Gemini devolvió texto vacío.")
+                    raise RuntimeError(
+                        "Gemini devolvió texto vacío."
+                    )
 
-                print("[Gemini] Investigación completada.")
+                print(
+                    "[Gemini] Investigación completada."
+                )
 
-                return text
+                return response_text
 
             except Exception as error:
 
                 last_error = error
 
-                status_code = self._get_status_code(error)
+                status_code = self._get_status_code(
+                    error
+                )
 
                 print()
 
@@ -98,13 +118,18 @@ class GeminiService:
                 print(str(error))
 
                 # ====================================================
-                # ERROR NO REINTENTABLE
+                # DETERMINAR SI ES REINTENTABLE
                 # ====================================================
 
-                if not self._is_retryable_error(error, status_code):
+                if not self._is_retryable_error(
+                    error,
+                    status_code
+                ):
 
                     print(
-                        "[Gemini] El error no parece " "transitorio. No se reintentará."
+                        "[Gemini] El error no parece "
+                        "transitorio. "
+                        "No se reintentará."
                     )
 
                     raise
@@ -115,7 +140,17 @@ class GeminiService:
 
                 if attempt >= MAX_RETRIES:
 
-                    print("[Gemini] Se alcanzó el máximo " "de reintentos.")
+                    print()
+
+                    print(
+                        "[Gemini] Se alcanzó el máximo "
+                        "de reintentos."
+                    )
+
+                    print(
+                        "[Gemini] La investigación "
+                        "no pudo completarse."
+                    )
 
                     raise
 
@@ -123,29 +158,53 @@ class GeminiService:
                 # EXPONENTIAL BACKOFF
                 # ====================================================
 
-                delay = min(INITIAL_RETRY_DELAY * (2 ** (attempt - 1)), MAX_RETRY_DELAY)
+                delay = min(
+                    INITIAL_RETRY_DELAY
+                    * (2 ** (attempt - 1)),
+                    MAX_RETRY_DELAY
+                )
 
-                # Pequeña variación para evitar que varios
-                # intentos ocurran exactamente al mismo tiempo.
+                # Pequeña variación para evitar
+                # múltiples solicitudes simultáneas.
 
                 jitter = random.uniform(0, 1)
 
                 total_delay = delay + jitter
 
-                print(f"[Gemini] Reintentando en " f"{total_delay:.1f} segundos...")
+                print(
+                    f"[Gemini] Error transitorio. "
+                    f"Reintentando en "
+                    f"{total_delay:.1f} segundos..."
+                )
 
                 time.sleep(total_delay)
 
-        raise last_error
+        # ========================================================
+        # SEGURIDAD
+        # ========================================================
+
+        if last_error is not None:
+
+            raise last_error
+
+        raise RuntimeError(
+            "La investigación de Gemini "
+            "terminó sin resultado."
+        )
 
     # ========================================================
     # DETECTAR ERRORES TRANSITORIOS
     # ========================================================
 
-    def _is_retryable_error(self, error, status_code=None):
+    def _is_retryable_error(
+        self,
+        error,
+        status_code=None
+    ):
 
-        # Errores HTTP que normalmente pueden
-        # resolverse reintentando.
+        # ====================================================
+        # ERRORES HTTP TRANSITORIOS
+        # ====================================================
 
         if status_code in (
             408,
@@ -158,21 +217,90 @@ class GeminiService:
 
             return True
 
+        # ====================================================
+        # NOMBRE DE LA EXCEPCIÓN
+        # ====================================================
+
+        error_type = type(error).__name__.lower()
+
+        retryable_exception_names = [
+            "remoteprotocolerror",
+            "connectionerror",
+            "connectionreseterror",
+            "connectionabortederror",
+            "timeout",
+            "timeouterror",
+            "readtimeout",
+            "connecttimeout",
+            "networkerror",
+        ]
+
+        for exception_name in retryable_exception_names:
+
+            if exception_name in error_type:
+
+                return True
+
+        # ====================================================
+        # MENSAJE DEL ERROR
+        # ====================================================
+
         message = str(error).lower()
 
         retry_keywords = [
-            "503",
-            "unavailable",
-            "high demand",
-            "temporarily",
-            "timeout",
-            "timed out",
-            "rate limit",
-            "resource exhausted",
+
+            # ------------------------------------
+            # HTTP / Gemini
+            # ------------------------------------
+
+            "408",
             "429",
             "500",
             "502",
+            "503",
             "504",
+
+            "unavailable",
+            "high demand",
+            "temporarily",
+            "temporarily unavailable",
+
+            "rate limit",
+            "resource exhausted",
+
+            # ------------------------------------
+            # Conexiones
+            # ------------------------------------
+
+            "remoteprotocolerror",
+            "server disconnected",
+            "disconnected without sending a response",
+
+            "connection reset",
+            "connection aborted",
+            "connection error",
+
+            "connection refused",
+            "connection closed",
+
+            "broken pipe",
+
+            # ------------------------------------
+            # Timeout
+            # ------------------------------------
+
+            "timeout",
+            "timed out",
+            "read timeout",
+            "connect timeout",
+
+            # ------------------------------------
+            # Problemas temporales de red
+            # ------------------------------------
+
+            "temporary failure",
+            "temporary error",
+            "network error",
         ]
 
         for keyword in retry_keywords:
@@ -187,13 +315,20 @@ class GeminiService:
     # OBTENER STATUS CODE
     # ========================================================
 
-    def _get_status_code(self, error):
+    def _get_status_code(
+        self,
+        error
+    ):
 
         # ----------------------------------------------------
         # Algunos errores exponen .code
         # ----------------------------------------------------
 
-        code = getattr(error, "code", None)
+        code = getattr(
+            error,
+            "code",
+            None
+        )
 
         if isinstance(code, int):
 
@@ -203,11 +338,19 @@ class GeminiService:
         # Algunos errores exponen response.status_code
         # ----------------------------------------------------
 
-        response = getattr(error, "response", None)
+        response = getattr(
+            error,
+            "response",
+            None
+        )
 
         if response is not None:
 
-            status_code = getattr(response, "status_code", None)
+            status_code = getattr(
+                response,
+                "status_code",
+                None
+            )
 
             if isinstance(status_code, int):
 
@@ -219,11 +362,17 @@ class GeminiService:
     # PARSEAR REPORTE
     # ========================================================
 
-    def parse_report(self, response_text, expected_count=None):
+    def parse_report(
+        self,
+        response_text,
+        expected_count=None
+    ):
 
         if not response_text:
 
-            raise ValueError("La respuesta de Gemini está vacía.")
+            raise ValueError(
+                "La respuesta de Gemini está vacía."
+            )
 
         text = response_text.strip()
 
@@ -256,12 +405,21 @@ class GeminiService:
         except json.JSONDecodeError as error:
 
             print()
-            print("[Gemini] La respuesta " "no contiene JSON válido.")
+
+            print(
+                "[Gemini] La respuesta "
+                "no contiene JSON válido."
+            )
 
             print()
-            print(text[:2000])
 
-            raise ValueError("Gemini no devolvió JSON válido.") from error
+            print(
+                text[:2000]
+            )
+
+            raise ValueError(
+                "Gemini no devolvió JSON válido."
+            ) from error
 
         # ========================================================
         # VALIDAR CON PYDANTIC
@@ -269,12 +427,15 @@ class GeminiService:
 
         try:
 
-            report = ResearchReport.model_validate(data)
+            report = ResearchReport.model_validate(
+                data
+            )
 
         except Exception as error:
 
             raise ValueError(
-                "El reporte de Gemini no " "cumple el esquema esperado."
+                "El reporte de Gemini no "
+                "cumple el esquema esperado."
             ) from error
 
         # ========================================================
@@ -298,6 +459,12 @@ class GeminiService:
     # EXTRAER FUENTES
     # ========================================================
 
-    def extract_grounding_sources(self, response):
+    def extract_grounding_sources(
+        self,
+        response
+    ):
 
-        return {"queries": [], "sources": []}
+        return {
+            "queries": [],
+            "sources": []
+        }
