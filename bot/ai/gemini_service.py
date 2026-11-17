@@ -31,7 +31,8 @@ class GeminiService:
         self.model = GEMINI_MODEL
 
         self.client = genai.Client(
-            api_key=GEMINI_API_KEY
+            api_key=GEMINI_API_KEY,
+            http_options=types.HttpOptions(api_version="v1beta"),
         )
 
         print(f"[Gemini] Modelo: {self.model}")
