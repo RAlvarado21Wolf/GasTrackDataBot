@@ -98,6 +98,7 @@ def fetch_mem_report(session=None):
             f"https://mem.gob.gt/wp-content/uploads/{day:%Y/%m}/"
             f"Informe-de-precios-de-combustible-a-nivel-nacional-{day:%Y-%m-%d}.pdf"
         )
+    previous = None
     if CURRENT_PATH.exists():
         previous = json.loads(CURRENT_PATH.read_text(encoding="utf-8"))
         old_url = next(
@@ -113,6 +114,10 @@ def fetch_mem_report(session=None):
         parsed = urlparse(pdf_url)
         if parsed.hostname not in {"mem.gob.gt", "www.mem.gob.gt"} or not parsed.path.lower().endswith(".pdf"):
             continue
+        cached = _cached_report(previous, pdf_url)
+        if cached:
+            print("[MEM] Informe ya validado; se reutilizan los precios publicados.")
+            return cached
         try:
             pdf = session.get(pdf_url, timeout=20)
             pdf.raise_for_status()
@@ -122,6 +127,31 @@ def fetch_mem_report(session=None):
         except (requests.RequestException, ValueError) as error:
             last_error = error
     raise RuntimeError(f"No se pudo descargar un informe oficial del MEM: {last_error}")
+
+
+def _cached_report(previous, pdf_url):
+    """Evita gastar una llamada Gemini si el informe y sus 22 filas ya se publicaron."""
+    if not previous:
+        return None
+    departments = previous.get("departments", {})
+    if set(departments) != set(DEPARTMENTS):
+        return None
+    if any(
+        data.get("source_type") != "mem"
+        or data.get("source_url") != pdf_url
+        or data.get("data_type") != "observed"
+        or any(data.get(fuel) is None for fuel in ("superior", "regular", "diesel"))
+        or not data.get("price_date")
+        for data in departments.values()
+    ):
+        return None
+    if len({data["price_date"] for data in departments.values()}) != 1:
+        return None
+    records = [
+        PriceRecord.model_validate({"department": name, **departments[name]})
+        for name in DEPARTMENTS
+    ]
+    return ResearchReport(research_date=records[0].price_date, records=records)
 
 
 def _parse_pdf(content, pdf_url):

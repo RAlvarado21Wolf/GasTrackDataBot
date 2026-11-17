@@ -210,17 +210,28 @@ class GeminiService:
             + ", ".join(DEPARTMENTS)
             + ". Si no puedes leer una celda, usa null; no inventes valores."
         )
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=[
-                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                prompt,
-            ],
-            config=types.GenerateContentConfig(
-                temperature=0,
-                response_mime_type="application/json",
-            ),
-        )
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=[
+                        types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                        prompt,
+                    ],
+                    config=types.GenerateContentConfig(
+                        temperature=0,
+                        response_mime_type="application/json",
+                    ),
+                )
+                break
+            except Exception as error:
+                if attempt == MAX_RETRIES or not self._is_retryable_error(
+                    error, self._get_status_code(error)
+                ):
+                    raise
+                delay = min(INITIAL_RETRY_DELAY * (2 ** (attempt - 1)), MAX_RETRY_DELAY)
+                print(f"[Gemini] Lectura PDF: error transitorio; reintento {attempt}/{MAX_RETRIES} en {delay:.0f}s")
+                time.sleep(delay)
         report = self.parse_report(response.text, expected_count=len(DEPARTMENTS))
         for record in report.records:
             record.modality = "autoservicio"

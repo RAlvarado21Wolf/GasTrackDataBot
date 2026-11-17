@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from bot.config import DEPARTMENTS
-from bot.mem_service import find_report_url, parse_report_text, fetch_mem_report, MEM_PAGE
+from bot.mem_service import find_report_url, parse_report_text, fetch_mem_report, _cached_report, MEM_PAGE
 from bot.validator import validate_report
 
 
@@ -58,6 +58,18 @@ class MemServiceTests(unittest.TestCase):
             current.read_text.return_value = '{"departments":{"Guatemala":{"source_type":"mem","source_url":"' + source_url + '"}}}'
             self.assertEqual(fetch_mem_report(Session()), "report")
             parse.assert_called_once_with(b"%PDF test", source_url)
+
+    def test_reuses_complete_official_report(self):
+        source_url = "https://mem.gob.gt/report.pdf"
+        row = {
+            "source_type": "mem", "source_url": source_url,
+            "data_type": "observed", "price_date": "2026-11-11",
+            "superior": 33.19, "regular": 30.86, "diesel": 41.49,
+        }
+        previous = {"departments": {name: row for name in DEPARTMENTS}}
+        report = _cached_report(previous, source_url)
+        self.assertEqual(len(report.records), 22)
+        self.assertEqual(report.records[0].regular, 30.86)
 
 
 if __name__ == "__main__":
