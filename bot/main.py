@@ -16,6 +16,7 @@ from bot.research_merge import merge_reports
 from bot.updater import save_report
 from bot.validator import validate_report
 from bot.mem_service import fetch_mem_report
+from bot.current_enrichment import enrich_current
 
 VERSION = "3.4.0"
 
@@ -51,12 +52,14 @@ def main():
                     for name, data in official_departments.items()
                 ):
                     print("[MEM] El informe ya está publicado; no se modifica la fecha de actualización.")
+                    enrich_current()
                     return
             current_path, history_path = save_report(
                 official_departments,
                 {"queries": [], "sources": [official_report.records[0].source_url]},
             )
             print(f"[MEM] 22 departamentos publicados: {current_path}; {history_path}")
+            enrich_current()
             return
         except (OSError, ValueError, RuntimeError, PdfReadError, requests.RequestException) as error:
             print(f"[MEM] Informe no disponible o incompleto: {error}")
@@ -293,6 +296,7 @@ def main():
         print(f"Current: {current_path}")
 
         print(f"History: {history_path}")
+        enrich_current()
 
     except Exception as error:
 

@@ -20,4 +20,4 @@ python -m unittest discover -s tests -v
 
 Gemini se usa para leer informes oficiales escaneados y como respaldo de investigación si el informe no está disponible; configure `GEMINI_API_KEY` como variable de entorno. El flujo programado usa el secreto de GitHub con ese nombre.
 
-`data/current.json` y `history/YYYY-MM-DD.json` se publican desde este repositorio. El tipo de cambio y el precio internacional aún no forman parte del conjunto de datos; requieren fuentes y fechas propias antes de mostrarse como valores actuales.
+`data/current.json` y `history/YYYY-MM-DD.json` se publican desde este repositorio. `current.json` también incluye el precio observado anterior de cada departamento y dos indicadores de mercado con fechas propias: tipo de cambio GTQ/USD de la página del Banco de Guatemala y petróleo WTI en USD/barril de la U.S. Energy Information Administration. El WTI es una referencia de petróleo crudo, no un precio de gasolina guatemalteca.
