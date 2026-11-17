@@ -37,6 +37,8 @@ MAX_RETRY_DELAY = float(os.getenv("GEMINI_MAX_RETRY_DELAY", "30"))
 # ============================================================
 
 TIMEZONE = "America/Guatemala"
+MIN_FUEL_PRICE = 1.0
+MAX_FUEL_PRICE = 100.0
 
 
 # ============================================================
@@ -73,6 +75,4 @@ DEPARTMENTS = [
 # VALIDACIONES
 # ============================================================
 
-if not GEMINI_API_KEY:
-
-    raise RuntimeError("No se encontró GEMINI_API_KEY en el archivo .env")
+# La clave solo es necesaria cuando se usa Gemini como respaldo.

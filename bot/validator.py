@@ -1,6 +1,8 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from urllib.parse import urlparse
 
-from bot.config import DEPARTMENTS, MIN_FUEL_PRICE, MAX_FUEL_PRICE
+from bot.config import DEPARTMENTS, MIN_FUEL_PRICE, MAX_FUEL_PRICE, TIMEZONE
 
 
 def validate_report(report):
@@ -86,8 +88,9 @@ def validate_report(report):
         if record.price_date:
 
             try:
-
-                datetime.strptime(record.price_date, "%Y-%m-%d")
+                parsed_date = datetime.strptime(record.price_date, "%Y-%m-%d").date()
+                if parsed_date > datetime.now(ZoneInfo(TIMEZONE)).date():
+                    errors.append(f"{record.department}: fecha futura ({record.price_date}).")
 
             except ValueError:
 
@@ -108,8 +111,9 @@ def validate_report(report):
                 errors.append(f"{record.department}: " "tiene precios pero no fuente.")
 
             if not record.price_date:
-
-                warnings.append(f"{record.department}: " "tiene precios pero no fecha.")
+                errors.append(f"{record.department}: tiene precios pero no fecha.")
+            if not record.source_url or urlparse(record.source_url).scheme != "https" or not urlparse(record.source_url).hostname:
+                errors.append(f"{record.department}: falta URL HTTPS de la fuente.")
 
     return {
         "valid": len(errors) == 0,

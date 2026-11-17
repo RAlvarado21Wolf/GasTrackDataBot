@@ -1,3 +1,9 @@
+import requests
+import json
+from pypdf.errors import PdfReadError
+
+from bot.updater import DATA_DIR
+
 from bot.ai.gemini_service import GeminiService
 from bot.prompt import build_research_prompt, build_missing_departments_prompt
 
@@ -8,8 +14,10 @@ from bot.normalizer import normalize_report
 from bot.research_merge import merge_reports
 
 from bot.updater import save_report
+from bot.validator import validate_report
+from bot.mem_service import fetch_mem_report
 
-VERSION = "3.3.0"
+VERSION = "3.4.0"
 
 
 def main():
@@ -22,6 +30,37 @@ def main():
     print()
 
     try:
+        try:
+            official_report = fetch_mem_report()
+            validation = validate_report(official_report)
+            if not validation["valid"]:
+                raise ValueError("Informe MEM inválido: " + "; ".join(validation["errors"]))
+            official_departments = normalize_report(official_report, apply_proxies=False)
+            if not any(data["freshness"] == "recent" for data in official_departments.values()):
+                raise ValueError("El informe MEM ya no es reciente")
+            previous_path = DATA_DIR / "current.json"
+            if previous_path.exists():
+                previous = json.loads(previous_path.read_text(encoding="utf-8"))
+                if all(
+                    previous.get("departments", {}).get(name, {}).get("price_date") == data["price_date"]
+                    and previous.get("departments", {}).get(name, {}).get("source_url") == data["source_url"]
+                    and all(
+                        previous.get("departments", {}).get(name, {}).get(fuel) == data[fuel]
+                        for fuel in ("superior", "regular", "diesel")
+                    )
+                    for name, data in official_departments.items()
+                ):
+                    print("[MEM] El informe ya está publicado; no se modifica la fecha de actualización.")
+                    return
+            current_path, history_path = save_report(
+                official_departments,
+                {"queries": [], "sources": [official_report.records[0].source_url]},
+            )
+            print(f"[MEM] 22 departamentos publicados: {current_path}; {history_path}")
+            return
+        except (OSError, ValueError, RuntimeError, PdfReadError, requests.RequestException) as error:
+            print(f"[MEM] Informe no disponible o incompleto: {error}")
+            print("[Bot] Iniciando investigación con Gemini.")
 
         # ====================================================
         # GEMINI
@@ -129,11 +168,17 @@ def main():
             research_date=(primary_report.research_date), records=merged_records
         )
 
+        validation = validate_report(merged_report)
+        if not validation["valid"]:
+            raise ValueError("Reporte inválido: " + "; ".join(validation["errors"]))
+        for warning in validation["warnings"]:
+            print(f"[Validación] {warning}")
+
         # ====================================================
         # NORMALIZAR FINALMENTE
         # ====================================================
 
-        departments = normalize_report(merged_report, apply_proxies=True)
+        departments = normalize_report(merged_report, apply_proxies=False)
 
         # ====================================================
         # COBERTURA
@@ -221,6 +266,16 @@ def main():
 
         print("[Bot] Guardando datos...")
 
+        if not any(
+            data.get("data_type") == "observed"
+            and data.get("freshness") == "recent"
+            for data in departments.values()
+        ):
+            raise ValueError(
+                "No se encontraron precios observados de los últimos 7 días; "
+                "no se publicarán datos antiguos con una fecha de actualización nueva."
+            )
+
         current_path, history_path = save_report(
             departments, {"queries": [], "sources": []}
         )
@@ -250,6 +305,7 @@ def main():
         print(f"{type(error).__name__}")
 
         print(str(error))
+        raise
 
 
 if __name__ == "__main__":

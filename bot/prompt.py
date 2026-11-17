@@ -1,14 +1,21 @@
 # bot/prompt.py
 
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from bot.config import TIMEZONE
+
+
 def build_research_prompt():
 
+    today = datetime.now(ZoneInfo(TIMEZONE)).date()
     return """
 Eres el sistema automatizado de investigación de precios
 de combustibles de GasTrack GT.
 
 FECHA ACTUAL:
-30 de septiembre de 2026.
+__TODAY__ (Guatemala).
 
 OBJETIVO:
 
@@ -67,7 +74,7 @@ Busca especialmente:
 
 "Precios promedio de combustibles departamentales"
 
-"precios combustibles Guatemala septiembre 2026"
+"precios combustibles Guatemala __YEAR__"
 
 ============================================================
 REGLA DE FECHA
@@ -187,7 +194,7 @@ La estructura debe ser:
             "superior": 45.29,
             "regular": 43.26,
             "diesel": 49.37,
-            "price_date": "2026-09-28",
+            "price_date": "YYYY-MM-DD",
             "modality": "autoservicio",
             "source": "Ministerio de Energía y Minas",
             "source_type": "mem",
@@ -220,10 +227,11 @@ Antes de responder:
    utiliza null.
 
 7. Devuelve exclusivamente JSON válido.
-"""
+""".replace("__TODAY__", today.isoformat()).replace("__YEAR__", str(today.year))
 
 
 def build_missing_departments_prompt(missing_departments):
+    today = datetime.now(ZoneInfo(TIMEZONE)).date()
 
     departments_text = "\n".join(
         f"- {department}" for department in missing_departments
@@ -239,7 +247,7 @@ información verificable para los siguientes departamentos:
 
 FECHA ACTUAL:
 
-30 de septiembre de 2026.
+{today.isoformat()} (Guatemala).
 
 ============================================================
 OBJETIVO
@@ -254,11 +262,11 @@ Para CADA departamento realiza búsquedas específicas.
 
 Ejemplos de búsquedas:
 
-"precio gasolina [departamento] Guatemala septiembre 2026"
+"precio gasolina [departamento] Guatemala {today.year}"
 
-"precio combustibles [departamento] Guatemala 29 septiembre 2026"
+"precio combustibles [departamento] Guatemala {today.isoformat()}"
 
-"gasolina superior regular diesel [departamento] 2026"
+"gasolina superior regular diesel [departamento] {today.year}"
 
 "precios combustibles [departamento] MEM"
 

@@ -25,6 +25,8 @@ class GeminiService:
     # ========================================================
 
     def __init__(self):
+        if not GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY no está configurada para Gemini")
 
         self.model = GEMINI_MODEL
 
@@ -191,6 +193,40 @@ class GeminiService:
             "La investigación de Gemini "
             "terminó sin resultado."
         )
+
+    def extract_mem_pdf(self, pdf_bytes, source_url):
+        """Lee visualmente la primera página del PDF oficial escaneado."""
+        from bot.config import DEPARTMENTS
+
+        prompt = (
+            "Lee SOLO la tabla 'MODALIDAD: AUTOSERVICIO' de la primera página "
+            "de este informe oficial del MEM. Devuelve JSON con research_date "
+            "(fecha final del monitoreo, YYYY-MM-DD) y records. Cada record "
+            "debe incluir department, superior, regular, diesel y price_date "
+            "(la misma fecha final). Usa números en Q/galón. No uses la tabla "
+            "de servicio completo, comparativos ni promedios generales. "
+            "Devuelve exactamente un registro para cada departamento: "
+            + ", ".join(DEPARTMENTS)
+            + ". Si no puedes leer una celda, usa null; no inventes valores."
+        )
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=[
+                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0,
+                response_mime_type="application/json",
+            ),
+        )
+        report = self.parse_report(response.text, expected_count=len(DEPARTMENTS))
+        for record in report.records:
+            record.modality = "autoservicio"
+            record.source = "Ministerio de Energía y Minas"
+            record.source_type = "mem"
+            record.source_url = source_url
+        return report
 
     # ========================================================
     # DETECTAR ERRORES TRANSITORIOS
