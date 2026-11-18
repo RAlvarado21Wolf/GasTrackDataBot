@@ -547,15 +547,15 @@
     },
     "market": {
         "exchange_rate": {
-            "value": 7.63985,
-            "date": "2026-11-17",
+            "value": 7.64489,
+            "date": "2026-11-18",
             "unit": "GTQ/USD",
             "source": "Banco de Guatemala",
             "source_url": "https://www.banguat.gob.gt/tipo_cambio/"
         },
         "international_price": {
-            "value": 89.24,
-            "date": "2026-11-16",
+            "value": 89.53,
+            "date": "2026-11-17",
             "unit": "USD/barrel",
             "benchmark": "WTI",
             "source": "U.S. Energy Information Administration",
